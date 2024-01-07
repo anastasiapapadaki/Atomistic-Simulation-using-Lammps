@@ -1,0 +1,57 @@
+# ============= define variables
+variable        fccCu equal 3.597
+variable        L1 equal ${fccCu}*5
+variable        L2 equal ${fccCu}*5
+variable        Ti equal 0.01
+variable        Tf equal 0.01
+
+# ============= basic parameters
+units           metal
+boundary        p p p
+atom_style      atomic
+
+# ============= create box
+region          system block -${L1} ${L1} -${L1} ${L1} -${L1} ${L1}
+region          cube block -${L2} ${L2} -${L2} ${L2} -${L2} ${L2}
+create_box      1 system
+
+# ============= force field
+pair_style      eam/alloy
+pair_coeff      * * Cu_zhou.eam.alloy Cu
+
+# ============= create atoms (last command used to re-set lattice to default value)
+lattice         fcc   ${fccCu}
+create_atoms    1 region cube
+lattice         none 1.0
+
+# ============= give atoms velocity
+# ============= fix nve + berendsen = NVT ensemble
+# ============= temperature increases from 1 K to 2500 K
+# ============= set timestep (1 fs)
+velocity        all create ${Ti} 425521 rot yes mom yes dist gaussian
+fix		mynpt all npt temp ${Ti} ${Ti} 0.1 aniso 0 0 1 
+thermo 		500
+timestep	0.0001
+run             10000
+unfix		mynpt  
+fix             mynve all nve
+fix             myber all temp/berendsen ${Ti} ${Tf} 0.1
+fix             myrc all recenter INIT INIT INIT
+timestep        0.001
+
+
+# ============= dump atom positions every 1 ps and log info every 1 ps
+dump            dp1 all atom 1000 dump0.lammpstrj
+thermo          1000
+fix             mydef all deform 1 x delta 0 10 y volume z volume
+#calculate the deformation
+variable        L equal lx # box size
+fix             myat1 all ave/time 10 10 100 v_L file boxsize0.dat
+compute         peratom all stress/atom NULL
+compute         p all reduce sum c_peratom[1]
+variable        press_x equal -c_p/(vol)
+fix		myat2 all ave/time 10 10 100 v_press_x file pressure0.dat
+
+# ============= run (100 ps)
+
+run             100000
